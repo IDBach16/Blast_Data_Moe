@@ -40,9 +40,9 @@ player_names <- tibble(player_name = c("Charlie Valencic","Alex Lott","Noah Goet
                                        "Will Schrimer","Luke Pappano","Logan Rosenberger","Adam Maybury",
                                        "Cooper Ridley","Griffin Booth","Tyler Willenbrink","Kayde Ridley","Carter Christenson","Connor Scoggins",
                                        "Gunnar Voellmecke","Jake Bell","Athan Bridges","Teegan Cumberland","Connor Cuozzo","Matt Ponatoski","Jackson Porta",
-                                       "Donovan Glosser","Camdon Broadnax"),
-                                       id = c(437961,438737,438070,408367,437963,437968,437969,438071,437959,437958,438075,438072,437960,360763,
-                                              356423,442478,438147,296412,437967,437966,437962,322227,309062))
+                                       "Donovan Glosser","Camdon Broadnax","Brody Foltz"),
+                       id = c(437961,438737,438070,408367,437963,437968,437969,438071,437959,437958,438075,438072,437960,360763,
+                              356423,442478,438147,296412,437967,437966,437962,322227,309062,287042))
 variables <- tibble(On_plane = c())
 
 player_data <- function(player_id, player_name=NULL){
@@ -85,36 +85,52 @@ data_cleaned <- data_cleaned %>%
 data_cleaned <- data_cleaned %>%
   select(-sport_id, -peak_speed.name, -context.environment, -has_video, -has_ball_flight, -is_air_swing, -early_connection.name, -body_tilt_angle.name, -body_rotation.name, -bat_path_angle.name, -swing_speed.name, -connection.name,
          -vertical_bat_angle.name, -planar_efficiency.name, -peak_hand_speed.name, -power.name, -time_to_contact.name,
-         -body_rotation.name, -commit_time.name, -on_plane.name, -blast_factor_2.name, -equipment.name, -has_video, -has_ball_flight, -rotational_acceleration.name, -peak_hand_speed.name)
+         -body_rotation.name, -commit_time.name, -on_plane.name, -blast_factor_2.name, -equipment.name, -has_video, -has_ball_flight, -rotational_acceleration.name, -peak_hand_speed.name,
+        -blast_factor_2.value, -blast_factor_2.score, -created_at.time, -early_connection.display_value, -swing_speed.display_value, -connection.name, -vertical_bat_angle.display_value, -planar_efficiency.display_value, -peak_hand_speed.display_value, -power.display_value, -rotational_acceleration.display_value,
+         -time_to_contact.display_value, -commit_time.display_value, -on_plane.display_value, -peak_speed.display_value, -connection.display_value, -bat_path_angle.display_value, -connection.display_value,
+        -body_rotation.display_value, -body_tilt_angle.display_value)
 
 library(dplyr)
 
 # Correct usage of rename() function
 data_cleaned <- data_cleaned %>%
   rename(
-    early_connection_angle = early_connection.display_value,
-    body_tilt_angle = body_tilt_angle.display_value,
-    bat_path_angle = bat_path_angle.display_value,
-    planar_efficiency_angle = planar_efficiency.display_value,
-    swing_speed = swing_speed.display_value,
-    peak_hand_speed = peak_hand_speed.display_value,
-    rotational_acceleration = rotational_acceleration.display_value,
-    time_to_contact = time_to_contact.display_value,
-    body_rotation = body_rotation.display_value,
-    on_plane = on_plane.display_value,
-    connection = connection.display_value,
-    vertical_bat_angle = vertical_bat_angle.display_value,
-    power = power.display_value,
-    peak_speed = peak_speed.display_value,
-    blast_factor_2 = blast_factor_2.display_value,
-    commit_time = commit_time.display_value,
-    blast_id_website = blast_id,
-    date = created_at.date
+    early_connection = early_connection.value,
+    body_tilt_angle = body_tilt_angle.value,
+    bat_path_angle = bat_path_angle.value,
+    swing_speed = swing_speed.value,
+    connection = connection.value,
+    vertical_bat_angle = vertical_bat_angle.value,
+    planar_efficiency = planar_efficiency.value,
+    peak_hand_speed = peak_hand_speed.value,
+    power = power.value,
+    rotational_acceleration = rotational_acceleration.value,
+    time_to_contact = time_to_contact.value ,
+    body_rotation = body_rotation.value,
+    commit_time = commit_time.value,
+    on_plane = on_plane.value,
+    peak_speedv = peak_speed.value 
+    
   )
 
+df <- data_cleaned  # Use the correct dataframe reference
+
+# Convert multiple columns to integer
+# Convert player_ID to character
+df$player_id <- as.character(df$player_id)
+
+int_columns <- c("handedness", "early_connection", "body_tilt_angle", "bat_path_angle", 
+                 "connection", "vertical_bat_angle", "power.score", 'planar_efficiency', "body_rotation", "on_plane", "blast_factor_2.display_value")
+df[int_columns] <- lapply(df[int_columns], as.integer)  # Apply conversion to df
+
+# Convert multiple columns to numeric
+num_columns <- c("swing_speed", "peak_hand_speed", "power", "rotational_acceleration", 
+                 "time_to_contact", "commit_time", "peak_speedv")
+df[num_columns] <- lapply(df[num_columns], as.numeric)  # Apply conversion to df
+
+
+
 # Check the result
-head(data_cleaned)
-
-
-
-
+head(df)
+str(df)
+write.csv(data_cleaned[1:100, ], "moeller_blast.csv", row.names = FALSE)
