@@ -1,7 +1,11 @@
+#setwd("C:/Users/ibach/OneDrive - Terillium/Pictures/Moeller_Blast")
+
 library(webdriver)
 library(tidyverse)
 library(rvest)
 library(jsonlite)
+library(DBI)
+library(RSQLite)
 
 # Set up the PhantomJS session
 blast_url <- "https://blastconnect.com/login"
@@ -30,26 +34,38 @@ Sys.sleep(10)
 
 # Define player names and IDs
 player_names <- tibble(player_name = c("Charlie Valencic","Alex Lott","Noah Goettke","Adam Holstein",
-                                       "Will Schrimer","Luke Pappano","Logan Rosenberger","Adam Maybury",
+                                       "Will Schirmer","Luke Pappano","Logan Rosenberger","Adam Maybury",
                                        "Cooper Ridley","Griffin Booth","Tyler Willenbrink","Kayde Ridley",
                                        "Carter Christenson","Connor Scoggins","Gunnar Voellmecke","Jake Bell",
                                        "Athan Bridges","Teegan Cumberland","Connor Cuozzo","Matt Ponatoski",
-                                       "Jackson Porta","Donovan Glosser","Camdon Broadnax","Brody Foltz"),
+                                       "Jackson Porta","Donovan Glosser","Camden Broadnax","Brody Foltz","Connor Maupin",
+                                       "CJ Gilpin","Zak Wittenauer","Will Schlake","Kadin Ward","William Brenzel",
+                                       "Thomas Zimmerman","John Stallo","Ronnie Allen","Reggie Watson III",
+                                       "Ricky Maschinot"),
                        id = c(437961,438737,438070,408367,437963,437968,437969,438071,437959,437958,438075,438072,
-                              437960,360763,356423,442478,438147,296412,437967,437966,437962,322227,309062,287042))
+                              437960,360763,356423,442478,438147,296412,437967,437966,437962,322227,309062,287042,460131,
+                              460519,460184,460187,460186,460516,460188,460183,460520,457040,460518))
 
 # Define function to fetch player data
 player_data <- function(player_id, player_name=NULL){
-  ses$go(paste0("https://moeller-high-school.blastconnect.com/api/v3/insights/",player_id,"/metrics?action_type=swing&context_constraint[]=all&context_environment[]=all&context_pitch_location[]=all&context_pitch_type[]=all&context_slap_type[]=all&date[]=2024-01-05&date[]=2025-09-19&impact_type=impact&order=descending&page=1&per_page=100&score=true&sort_by=swing&sport=baseball&swing_type=swings_with_impact&videos_only=false"))
+  ses$go(paste0("https://moeller-high-school.blastconnect.com/api/v3/insights/", player_id,
+                "/metrics?action_type=swing&context_constraint[]=all&context_environment[]=all&context_pitch_location[]=all&context_pitch_type[]=all&context_slap_type[]=all&date[]=2024-01-05&date[]=2025-09-19&impact_type=impact&order=descending&page=1&per_page=450&score=true&sort_by=swing&sport=baseball&swing_type=swings_with_impact&videos_only=false"))
   
   url_adj <- ses$getSource()[[1]]
   
+  # Extract JSON from the response
   json_data <- sub(".*<pre.*?>", "", url_adj)
   json_data <- sub("</pre>.*", "", json_data)
   
+  # Validate JSON before parsing
+  if (!jsonlite::validate(json_data)) {
+    warning(paste("Invalid JSON response for player ID:", player_id))
+    return(tibble())
+  }
+  
   df <- fromJSON(json_data, flatten = T)[['data']][['data']]
   
-  # Check if df is NULL or empty, return an empty tibble if so
+  # Return empty tibble if df is NULL or empty
   if (is.null(df) || length(df) == 0) {
     return(tibble())
   }
@@ -61,17 +77,27 @@ player_data <- function(player_id, player_name=NULL){
   df %>% mutate(player_id = player_id, player_name = player_name)
 }
 
-# Fetch data for all players using map_df
+# Fetch data for all players using safe map_df
+safe_player_data <- purrr::safely(player_data)
+
 data <- 1:nrow(player_names) %>%
-  purrr::map_df(function(x) player_data(player_names$id[x], player_names$player_name[x]))
+  purrr::map_df(function(x) {
+    result <- safe_player_data(player_names$id[x], player_names$player_name[x])
+    if (!is.null(result$error)) {
+      print(paste("Error fetching data for player:", player_names$player_name[x]))
+      return(NULL)
+    }
+    result$result
+  })
 
 # Rename columns for easier access
 data <- data %>%
   rename_with(~ gsub("^metrics.", "", .), starts_with("metrics"))
 
+
 # Write the final data to a CSV file
-write.csv(data, "player_metrics_data.csv", row.names = FALSE)
-cat("CSV file 'player_metrics_data.csv' has been successfully written.\n")
+#write.csv(data, "player_metrics_data.csv", row.names = FALSE)
+#cat("CSV file 'player_metrics_data.csv' has been successfully written.\n")
 
 ################## Data Cleaning ##################
 
@@ -136,42 +162,60 @@ num_columns <- c("swing_speed", "peak_hand_speed", "power", "rotational_accelera
                  "time_to_contact", "commit_time", "peak_speed")
 df[num_columns] <- lapply(df[num_columns], as.numeric)
 
-# Check the result
-head(df)
-str(df)
+db = dbConnect(SQLite(),"Moeller_Blast.sqlite")
+dbWriteTable(db,"Moeller_Blast",df,overwrite=T)
+dbDisconnect(db)
+#file.copy("C:/Users/ibach/OneDrive - Terillium/Pictures/Moller Misc/Moeller_Blast.sqlite")
 
-setwd("C:/Users/ibach/OneDrive - Terillium/Pictures/Moller Misc")
-# Write cleaned data to a CSV file
-#write.csv(data_cleaned[1:100, ], "moeller_blast", row.names = FALSE)
-write.csv(data_cleaned, "moeller_blast_full.csv", row.names = FALSE)
-#########################################################################
-library(dplyr)
-# Group by player_name and calculate the mean for all numeric columns
-means_by_player <- df %>%
-  group_by(player_name) %>%
-  summarise(across(where(is.numeric), mean, na.rm = TRUE))
+# # Check the result
+# head(df)
+# str(df)
 
-# View the result
-print(means_by_player)
-
-##########
-
-# Load necessary libraries
-library(dplyr)
-
-# Specify the columns to exclude
-exclude_columns <- c("player_id", "player_name", "created_at.date", "id", "blast_id", "action_type", "handedness")
-
-# Select only numeric columns and exclude specified columns
-numeric_columns <- df %>%
-  select(-one_of(exclude_columns)) %>%
-  select_if(is.numeric)
-
-# Calculate the mean for each numeric column
-mean_values <- colMeans(numeric_columns, na.rm = TRUE)
-
-# Print the mean values
-print(mean_values)
-
-
+# setwd("C:/Users/ibach/OneDrive - Terillium/Pictures/Moller Misc")
+# # Write cleaned data to a CSV file
+# #write.csv(data_cleaned[1:100, ], "moeller_blast", row.names = FALSE)
+#write.csv(df, "moeller_blast_full.csv", row.names = FALSE)
+# #########################################################################
+# library(dplyr)
+# # Group by player_name and calculate the mean for all numeric columns
+# means_by_player <- df %>%
+#   group_by(player_name) %>%
+#   summarise(across(where(is.numeric), mean, na.rm = TRUE))
+# 
+# # View the result
+# print(means_by_player)
+# 
+# ##########
+# 
+# # Load necessary libraries
+# library(dplyr)
+# 
+# # Specify the columns to exclude
+# exclude_columns <- c("player_id", "player_name", "created_at.date", "id", "blast_id", "action_type", "handedness")
+# 
+# # Select only numeric columns and exclude specified columns
+# numeric_columns <- df %>%
+#   select(-one_of(exclude_columns)) %>%
+#   select_if(is.numeric)
+# 
+# # Calculate the mean for each numeric column
+# mean_values <- colMeans(numeric_columns, na.rm = TRUE)
+# 
+# # Print the mean values
+# print(mean_values)
+# 
+# ##########k means clustering of hitter########
+# 
+# # Step 2: Group by player_name and calculate the mean of relevant features
+# player_means <- df %>%
+#   group_by(player_name) %>%
+#   summarise(
+#     mean_peak_hand_speed = mean(peak_hand_speed, na.rm = TRUE),
+#     mean_swing_speed = mean(swing_speed, na.rm = TRUE),
+#     mean_connection = mean(connection, na.rm = TRUE),
+#     mean_rotational_acceleration = mean(rotational_acceleration, na.rm = TRUE),
+#     mean_body_rotation = mean(body_rotation, na.rm = TRUE),
+#     mean_vertical_bat_angle = mean(vertical_bat_angle, na.rm = TRUE),
+#     mean_time_to_contact = mean(time_to_contact, na.rm = TRUE)
+#   )
 
